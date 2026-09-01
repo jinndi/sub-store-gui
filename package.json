@@ -1,0 +1,99 @@
+{
+  "name": "sub-store-desktop",
+  "version": "0.1.0",
+  "description": "A self-contained Sub-Store desktop application powered by Electron.",
+  "homepage": "https://github.com/sub-store-org/Sub-Store",
+  "desktopName": "io.substore.desktop.desktop",
+  "type": "module",
+  "main": "app/dist/main.js",
+  "author": {
+    "name": "Sub-Store Desktop contributors",
+    "email": "noreply@sub-store-desktop.local"
+  },
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "vendor:sync": "node scripts/sync-sub-store.mjs",
+    "vendor:verify": "node scripts/verify-vendor.mjs",
+    "predev": "npm run vendor:sync && npm run build",
+    "dev": "electron .",
+    "predist": "npm run vendor:sync && npm test",
+    "predist:linux": "npm run vendor:sync && npm test",
+    "predist:win": "npm run vendor:sync && npm test",
+    "predist:mac": "npm run vendor:sync && npm test",
+    "dist": "electron-builder --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.0",
+    "electron": "44.1.0",
+    "electron-builder": "26.15.7",
+    "fflate": "0.8.3",
+    "typescript": "7.0.2"
+  },
+  "build": {
+    "appId": "io.substore.desktop",
+    "productName": "Sub-Store Desktop",
+    "asar": true,
+    "afterPack": "scripts/after-pack.cjs",
+    "npmRebuild": false,
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "app": "app",
+      "output": "release"
+    },
+    "extraResources": [
+      {
+        "from": "resources/vendor",
+        "to": "vendor"
+      },
+      {
+        "from": ".",
+        "to": "source",
+        "filter": [
+          "src/**/*",
+          "scripts/**/*",
+          "test/**/*",
+          "package-lock.json",
+          "tsconfig.json",
+          "vendor-lock.json",
+          "README.md",
+          "LICENSE",
+          "THIRD_PARTY_NOTICES.md"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "resources/vendor/frontend/512x512.png",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "resources/vendor/frontend/512x512.png",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "linux": {
+      "category": "Network",
+      "icon": "resources/vendor/frontend/512x512.png",
+      "syncDesktopName": true,
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  }
+}

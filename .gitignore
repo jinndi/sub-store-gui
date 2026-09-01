@@ -1,0 +1,12 @@
+node_modules/
+app/dist/
+/dist/
+release/
+*.log
+*.tsbuildinfo
+.DS_Store
+.idea/
+.vscode/
+
+# Downloaded, checksum-verified upstream release artifacts.
+resources/vendor/*

@@ -1,0 +1,14 @@
+{
+  "name": "sub-store-desktop",
+  "version": "0.1.0",
+  "description": "A self-contained Sub-Store desktop application powered by Electron.",
+  "homepage": "https://github.com/sub-store-org/Sub-Store",
+  "desktopName": "io.substore.desktop.desktop",
+  "type": "module",
+  "main": "dist/main.js",
+  "author": {
+    "name": "Sub-Store Desktop contributors",
+    "email": "noreply@sub-store-desktop.local"
+  },
+  "license": "AGPL-3.0-only"
+}
