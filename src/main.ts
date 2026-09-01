@@ -8,6 +8,10 @@ import {
   shell,
 } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
+import {
+  isPermissionAllowed,
+  isPermissionRequestAllowed,
+} from './permissions.js'
 import { createAppUrl, ensureRuntimeConfig } from './runtime-config.js'
 import { SubStoreService } from './sub-store-service.js'
 
@@ -117,14 +121,12 @@ async function createMainWindow(): Promise<void> {
 }
 
 function configurePermissions(appSession: Electron.Session, expectedOrigin: string): void {
-  const allowedPermissions = new Set(['clipboard-read'])
   appSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
-    return requestingOrigin === expectedOrigin && allowedPermissions.has(permission)
+    return isPermissionAllowed(permission, requestingOrigin, expectedOrigin)
   })
   appSession.setPermissionRequestHandler((webContents, permission, callback) => {
     callback(
-      webContents.getURL().startsWith(`${expectedOrigin}/`) &&
-      allowedPermissions.has(permission),
+      isPermissionRequestAllowed(permission, webContents.getURL(), expectedOrigin),
     )
   })
 }
