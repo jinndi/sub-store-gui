@@ -12,7 +12,7 @@ import {
   isPermissionAllowed,
   isPermissionRequestAllowed,
 } from './permissions.js'
-import { createAppUrl, ensureRuntimeConfig } from './runtime-config.js'
+import { createAppOrigin, createAppUrl, ensureRuntimeConfig } from './runtime-config.js'
 import { SubStoreService } from './sub-store-service.js'
 
 const SESSION_PARTITION = 'persist:substore-desktop'
@@ -67,7 +67,7 @@ async function createMainWindow(): Promise<void> {
   const vendorRoot = startedVendorRoot ?? (app.isPackaged
     ? path.join(process.resourcesPath, 'vendor')
     : path.join(app.getAppPath(), 'resources', 'vendor'))
-  const expectedOrigin = `http://127.0.0.1:${runtimeConfig.port}`
+  const expectedOrigin = createAppOrigin(runtimeConfig)
   const appSession = session.fromPartition(SESSION_PARTITION)
 
   configurePermissions(appSession, expectedOrigin)

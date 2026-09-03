@@ -27,7 +27,7 @@ export class SubStoreService {
     const backendPath = path.join(options.vendorRoot, 'backend', 'sub-store.bundle.cjs')
     const frontendPath = path.join(options.vendorRoot, 'frontend')
     const logPath = path.join(options.logDir, 'sub-store.log')
-    const origin = `http://127.0.0.1:${options.config.port}`
+    const origin = `http://${options.config.host}:${options.config.port}`
 
     await Promise.all([
       stat(backendPath),
@@ -42,7 +42,7 @@ export class SubStoreService {
       if (value !== undefined && !key.startsWith('SUB_STORE_')) env[key] = value
     }
     Object.assign(env, {
-      SUB_STORE_BACKEND_API_HOST: '127.0.0.1',
+      SUB_STORE_BACKEND_API_HOST: options.config.host,
       SUB_STORE_BACKEND_API_PORT: String(options.config.port),
       SUB_STORE_BACKEND_MERGE: '1',
       SUB_STORE_CORS_ALLOWED_ORIGINS: origin,
@@ -116,7 +116,7 @@ async function rotateLog(logPath: string): Promise<void> {
 
 async function waitForBackend(config: RuntimeConfig, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs
-  const origin = `http://127.0.0.1:${config.port}`
+  const origin = `http://${config.host}:${config.port}`
 
   while (Date.now() < deadline) {
     if (await probe(config, origin)) return
@@ -130,7 +130,7 @@ async function probe(config: RuntimeConfig, origin: string): Promise<boolean> {
   return new Promise((resolve) => {
     const request = http.get(
       {
-        host: '127.0.0.1',
+        host: config.host,
         port: config.port,
         path: `${config.apiPath}/api/utils/env`,
         headers: { Origin: origin },
