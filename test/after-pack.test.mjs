@@ -28,6 +28,7 @@ test('afterPack includes both package manifests in corresponding source', async 
     ))
 
     assert.equal(rootManifest.name, 'sub-store-desktop')
+    assert.equal(appManifest.version, rootManifest.version)
     assert.equal(appManifest.main, 'dist/main.js')
   } finally {
     await rm(appOutDir, { recursive: true, force: true })
