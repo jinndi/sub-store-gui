@@ -51,7 +51,7 @@ async function findAvailablePort(preferredPort: number): Promise<number> {
       const address = server.address()
       if (!address || typeof address === 'string') {
         server.close()
-        reject(new Error('无法获取本地服务端口'))
+        reject(new Error('Не удалось получить порт локальной службы.'))
         return
       }
       server.close((error) => (error ? reject(error) : resolve(address.port)))

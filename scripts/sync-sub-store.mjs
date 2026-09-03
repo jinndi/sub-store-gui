@@ -20,7 +20,7 @@ const frontendLicensePath = path.join(licensesDir, 'Sub-Store-Front-End-GPL-3.0.
 const manifestPath = path.join(vendorRoot, 'manifest.json')
 
 if (await vendorIsCurrent()) {
-  console.log(`Sub-Store ${lock.backend.version} / Front-End ${lock.frontend.version} 已通过校验`)
+  console.log(`Sub-Store ${lock.backend.version} / Front-End ${lock.frontend.version} проверка пройдена, синхронизация не требуется.`)
   process.exit(0)
 }
 
@@ -39,7 +39,7 @@ try {
   const extractedDistPath = path.join(extractedPath, 'dist')
   const treeSha256 = await sha256Tree(extractedDistPath)
   if (treeSha256 !== lock.frontend.treeSha256) {
-    throw new Error(`前端文件树校验失败\n期望: ${lock.frontend.treeSha256}\n实际: ${treeSha256}`)
+    throw new Error(`Ошибка проверки дерева файлов на стороне клиента\nОжидалось: ${lock.frontend.treeSha256}\nдействительный: ${treeSha256}`)
   }
 
   await rm(vendorRoot, { recursive: true, force: true })
@@ -58,7 +58,7 @@ try {
     `${JSON.stringify({ generatedAt: new Date().toISOString(), ...lock }, null, 2)}\n`,
   )
 
-  console.log(`已同步 Sub-Store ${lock.backend.version} / Front-End ${lock.frontend.version}`)
+  console.log(`Синхронизировано Sub-Store ${lock.backend.version} / Front-End ${lock.frontend.version}`)
 } finally {
   await rm(temporaryDir, { recursive: true, force: true })
 }
@@ -75,12 +75,12 @@ async function extractZipSafely(archiveBytes, destinationRoot) {
       normalizedPath.startsWith('../') ||
       normalizedPath.includes('\0')
     ) {
-      throw new Error(`ZIP 中包含不安全路径: ${archivePath}`)
+      throw new Error(`ZIP содержит небезопасный путь: ${archivePath}`)
     }
 
     const outputPath = path.resolve(resolvedRoot, normalizedPath)
     if (outputPath !== resolvedRoot && !outputPath.startsWith(`${resolvedRoot}${path.sep}`)) {
-      throw new Error(`ZIP 路径越界: ${archivePath}`)
+      throw new Error(`ZIP за пределами допустимой области: ${archivePath}`)
     }
     if (archivePath.endsWith('/')) {
       await mkdir(outputPath, { recursive: true })

@@ -48,7 +48,7 @@ export async function downloadVerified(url, expectedSha256) {
   const bytes = Buffer.from(await response.arrayBuffer())
   const actualSha256 = createHash('sha256').update(bytes).digest('hex')
   if (actualSha256 !== expectedSha256) {
-    throw new Error(`SHA-256 不匹配: ${url}\n期望: ${expectedSha256}\n实际: ${actualSha256}`)
+    throw new Error(`Несовпадение SHA-256: ${url}\nОжидаемый: ${expectedSha256}\nФактический: ${actualSha256}`)
   }
   return bytes
 }

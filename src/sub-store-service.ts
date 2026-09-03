@@ -75,7 +75,7 @@ export class SubStoreService {
 
     child.once('exit', (code) => {
       this.child = undefined
-      const message = `Sub-Store 后端已退出（代码 ${code}）`
+      const message = `Sub-Store Бэкенд завершил работу (код ${code}）`
       if (startupFailure) {
         startupFailure(new Error(message))
         return
@@ -123,7 +123,7 @@ async function waitForBackend(config: RuntimeConfig, timeoutMs: number): Promise
     await new Promise((resolve) => setTimeout(resolve, 150))
   }
 
-  throw new Error(`Sub-Store 后端在 ${timeoutMs / 1000} 秒内未就绪`)
+  throw new Error(`Sub-Store Бэкенд не готов в течение ${timeoutMs / 1000} секунд`)
 }
 
 async function probe(config: RuntimeConfig, origin: string): Promise<boolean> {

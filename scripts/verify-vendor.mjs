@@ -19,16 +19,16 @@ const frontendLicenseSha256 = await sha256File(
 )
 
 if (backendSha256 !== lock.backend.sha256) {
-  throw new Error(`Sub-Store 后端校验失败: ${backendSha256}`)
+  throw new Error(`Sub-Store Ошибка валидации на стороне сервера.: ${backendSha256}`)
 }
 if (frontendTreeSha256 !== lock.frontend.treeSha256) {
-  throw new Error(`Sub-Store 前端校验失败: ${frontendTreeSha256}`)
+  throw new Error(`Sub-Store Ошибка валидации на стороне клиента: ${frontendTreeSha256}`)
 }
 if (backendLicenseSha256 !== lock.backend.licenseSha256) {
-  throw new Error(`Sub-Store 后端许可证校验失败: ${backendLicenseSha256}`)
+  throw new Error(`Sub-Store Ошибка валидации лицензии на стороне сервера: ${backendLicenseSha256}`)
 }
 if (frontendLicenseSha256 !== lock.frontend.licenseSha256) {
-  throw new Error(`Sub-Store 前端许可证校验失败: ${frontendLicenseSha256}`)
+  throw new Error(`Sub-Store Ошибка валидации лицензии на стороне клиента: ${frontendLicenseSha256}`)
 }
 
-console.log(`校验通过：Sub-Store ${lock.backend.version} / Front-End ${lock.frontend.version}`)
+console.log(`Проверка пройдена：Sub-Store ${lock.backend.version} / Front-End ${lock.frontend.version}`)

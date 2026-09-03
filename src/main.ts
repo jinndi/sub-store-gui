@@ -81,7 +81,7 @@ async function createMainWindow(): Promise<void> {
       vendorRoot,
       onUnexpectedExit: (message) => {
         if (isQuitting) return
-        dialog.showErrorBox('Sub-Store Desktop', `${message}\n\n请查看应用数据目录中的日志。`)
+        dialog.showErrorBox('Sub-Store Desktop', `${message}\n\nПожалуйста, проверьте журналы в каталоге данных приложения.`)
         app.quit()
       },
     })
@@ -191,7 +191,7 @@ function configureMenu(): void {
       role: 'help',
       submenu: [
         {
-          label: '打开源代码目录',
+          label: 'Открыть каталог с исходным кодом',
           click: () => {
             const sourcePath = app.isPackaged
               ? path.join(process.resourcesPath, 'source')
@@ -200,7 +200,7 @@ function configureMenu(): void {
           },
         },
         {
-          label: '打开用户数据目录',
+          label: 'Открыть каталог с данными пользователя',
           click: () => void shell.openPath(app.getPath('userData')),
         },
       ],
@@ -212,8 +212,8 @@ function configureMenu(): void {
 function showFatalError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error)
   dialog.showErrorBox(
-    'Sub-Store Desktop 启动失败',
-    `${message}\n\n请先运行 npm run vendor:sync，并查看应用日志。`,
+    'Sub-Store Desktop запуск не удался',
+    `${message}\n\nПожалуйста, запустите это первым npm run vendor:sync，и проверьте журналы приложения.`,
   )
   app.quit()
 }
