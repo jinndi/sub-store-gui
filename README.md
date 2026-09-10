@@ -1,5 +1,7 @@
 # Sub-Store Desktop
 
+**Русский** | [English](README.en.md) | [简体中文](README.zh-CN.md)
+
 Настольный клиент Sub-Store, готовый к использованию сразу после установки. Приложение запускает официальный frontend и backend Sub-Store локально через Electron и не требует от пользователя установки Node.js, Docker или расширений для браузера.
 
 ## Отличия от shiteThings/sub-store-gui репозитория
