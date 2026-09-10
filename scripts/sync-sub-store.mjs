@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, cp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, cp, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { unzipSync } from 'fflate'
@@ -28,6 +28,7 @@ if (await vendorIsCurrent()) {
 }
 
 const temporaryDir = await mkdtemp(path.join(os.tmpdir(), 'sub-store-desktop-vendor-'))
+const stagingVendorRoot = await mkdtemp(path.join(path.dirname(vendorRoot), '.sub-store-vendor-'))
 try {
   const [backendBytes, frontendBytes, backendLicense, frontendLicense] = await Promise.all([
     downloadVerified(lock.backend.url, lock.backend.sha256),
@@ -45,25 +46,56 @@ try {
     throw new Error(`Ошибка проверки дерева файлов на стороне клиента\nОжидалось: ${lock.frontend.treeSha256}\nдействительный: ${treeSha256}`)
   }
 
-  await rm(vendorRoot, { recursive: true, force: true })
+  const stagedBackendDir = path.join(stagingVendorRoot, 'backend')
+  const stagedBackendPath = path.join(stagedBackendDir, lock.backend.output)
+  const stagedFrontendDir = path.join(stagingVendorRoot, 'frontend')
+  const stagedLicensesDir = path.join(stagingVendorRoot, 'licenses')
+  const stagedBackendLicensePath = path.join(stagedLicensesDir, 'Sub-Store-AGPL-3.0.txt')
+  const stagedFrontendLicensePath = path.join(stagedLicensesDir, 'Sub-Store-Front-End-GPL-3.0.txt')
+  const stagedManifestPath = path.join(stagingVendorRoot, 'manifest.json')
+
   await Promise.all([
-    mkdir(backendDir, { recursive: true }),
-    mkdir(licensesDir, { recursive: true }),
+    mkdir(stagedBackendDir, { recursive: true }),
+    mkdir(stagedLicensesDir, { recursive: true }),
   ])
   await Promise.all([
-    writeFile(backendPath, backendBytes, { mode: 0o644 }),
-    cp(extractedDistPath, frontendDir, { recursive: true }),
-    writeFile(backendLicensePath, backendLicense),
-    writeFile(frontendLicensePath, frontendLicense),
+    writeFile(stagedBackendPath, backendBytes, { mode: 0o644 }),
+    cp(extractedDistPath, stagedFrontendDir, { recursive: true }),
+    writeFile(stagedBackendLicensePath, backendLicense),
+    writeFile(stagedFrontendLicensePath, frontendLicense),
   ])
   await writeFile(
-    manifestPath,
+    stagedManifestPath,
     `${JSON.stringify({ generatedAt: new Date().toISOString(), ...lock }, null, 2)}\n`,
   )
+
+  await replaceVendorRoot(stagingVendorRoot)
 
   console.log(`Синхронизировано Sub-Store ${lock.backend.version} / Front-End ${lock.frontend.version}`)
 } finally {
   await rm(temporaryDir, { recursive: true, force: true })
+  await rm(stagingVendorRoot, { recursive: true, force: true })
+}
+
+async function replaceVendorRoot(stagingRoot) {
+  const backupRoot = `${vendorRoot}.backup-${process.pid}-${Date.now()}`
+  let movedCurrent = false
+
+  try {
+    try {
+      await rename(vendorRoot, backupRoot)
+      movedCurrent = true
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+
+    await rename(stagingRoot, vendorRoot)
+    await rm(backupRoot, { recursive: true, force: true })
+  } catch (error) {
+    await rm(vendorRoot, { recursive: true, force: true })
+    if (movedCurrent) await rename(backupRoot, vendorRoot)
+    throw error
+  }
 }
 
 async function extractZipSafely(archiveBytes, destinationRoot) {

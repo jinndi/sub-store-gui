@@ -26,12 +26,9 @@ export async function ensureUserVendor(
     await writeFile(runtimePaths.lockPath, await readFile(bundledLockPath), { mode: 0o600 })
   }
 
-  const hasVendor = await Promise.all([
-    isFile(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs')),
-    isFile(path.join(runtimePaths.vendorRoot, 'frontend', 'index.html')),
-  ])
-  if (!hasVendor.every(Boolean)) {
+  if (!(await isVendorReady(runtimePaths))) {
     await cp(bundledVendorRoot, runtimePaths.vendorRoot, { recursive: true, force: true })
+    await writeFile(runtimePaths.lockPath, await readFile(bundledLockPath), { mode: 0o600 })
   }
 
   return runtimePaths
@@ -40,6 +37,34 @@ export async function ensureUserVendor(
 async function isFile(filePath: string): Promise<boolean> {
   try {
     return (await stat(filePath)).isFile()
+  } catch {
+    return false
+  }
+}
+
+async function isVendorReady(runtimePaths: VendorRuntimePaths): Promise<boolean> {
+  try {
+    const [lockText, manifestText] = await Promise.all([
+      readFile(runtimePaths.lockPath, 'utf8'),
+      readFile(path.join(runtimePaths.vendorRoot, 'manifest.json'), 'utf8'),
+    ])
+    const lock = JSON.parse(lockText) as {
+      backend?: { version?: string }
+      frontend?: { version?: string }
+    }
+    const manifest = JSON.parse(manifestText) as {
+      backend?: { version?: string }
+      frontend?: { version?: string }
+    }
+    const files = await Promise.all([
+      isFile(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs')),
+      isFile(path.join(runtimePaths.vendorRoot, 'frontend', 'index.html')),
+    ])
+    return (
+      files.every(Boolean) &&
+      manifest.backend?.version === lock.backend?.version &&
+      manifest.frontend?.version === lock.frontend?.version
+    )
   } catch {
     return false
   }

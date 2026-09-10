@@ -16,23 +16,41 @@ test('ensureUserVendor initializes writable runtime files without overwriting up
     await mkdir(path.join(bundledVendorRoot, 'frontend'), { recursive: true })
     await writeFile(path.join(bundledVendorRoot, 'backend', 'sub-store.bundle.cjs'), 'bundled')
     await writeFile(path.join(bundledVendorRoot, 'frontend', 'index.html'), 'bundled')
-    await writeFile(bundledLockPath, '{"backend":{"version":"bundled"}}')
+    await writeFile(bundledLockPath, '{"backend":{"version":"bundled"},"frontend":{"version":"bundled"}}')
+    await writeFile(
+      path.join(bundledVendorRoot, 'manifest.json'),
+      '{"backend":{"version":"bundled"},"frontend":{"version":"bundled"}}',
+    )
 
     const runtimePaths = await ensureUserVendor(userDataDir, bundledVendorRoot, bundledLockPath)
-    assert.equal(await readFile(runtimePaths.lockPath, 'utf8'), '{"backend":{"version":"bundled"}}')
+    assert.equal(
+      await readFile(runtimePaths.lockPath, 'utf8'),
+      '{"backend":{"version":"bundled"},"frontend":{"version":"bundled"}}',
+    )
     assert.equal(
       await readFile(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs'), 'utf8'),
       'bundled',
     )
 
-    await writeFile(runtimePaths.lockPath, '{"backend":{"version":"updated"}}')
+    await writeFile(runtimePaths.lockPath, '{"backend":{"version":"updated"},"frontend":{"version":"updated"}}')
     await writeFile(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs'), 'updated')
+    await writeFile(
+      path.join(runtimePaths.vendorRoot, 'manifest.json'),
+      '{"backend":{"version":"updated"},"frontend":{"version":"updated"}}',
+    )
     await ensureUserVendor(userDataDir, bundledVendorRoot, bundledLockPath)
-    assert.equal(await readFile(runtimePaths.lockPath, 'utf8'), '{"backend":{"version":"updated"}}')
+    assert.equal(
+      await readFile(runtimePaths.lockPath, 'utf8'),
+      '{"backend":{"version":"updated"},"frontend":{"version":"updated"}}',
+    )
     assert.equal(
       await readFile(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs'), 'utf8'),
       'updated',
     )
+
+    await rm(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs'))
+    await ensureUserVendor(userDataDir, bundledVendorRoot, bundledLockPath)
+    assert.equal(await readFile(runtimePaths.lockPath, 'utf8'), '{"backend":{"version":"bundled"},"frontend":{"version":"bundled"}}')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
