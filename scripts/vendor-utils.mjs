@@ -6,8 +6,11 @@ import { fileURLToPath } from 'node:url'
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const vendorRoot = path.join(projectRoot, 'resources', 'vendor')
 
-export async function readVendorLock() {
-  return JSON.parse(await readFile(path.join(projectRoot, 'vendor-lock.json'), 'utf8'))
+export async function readVendorLock(lockPath) {
+  if (!lockPath) {
+    lockPath = path.join(projectRoot, 'vendor-lock.json')
+  }
+  return JSON.parse(await readFile(lockPath, 'utf8'))
 }
 
 export async function sha256File(filePath) {

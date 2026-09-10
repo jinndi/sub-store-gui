@@ -13,7 +13,7 @@ import {
 
 const lockPath = process.env.VENDOR_LOCK_PATH || path.join(projectRoot, 'vendor-lock.json')
 
-const lock = await readVendorLock()
+const lock = await readVendorLock(lockPath)
 const backendDir = path.join(vendorRoot, 'backend')
 const backendPath = path.join(backendDir, lock.backend.output)
 const frontendDir = path.join(vendorRoot, 'frontend')
