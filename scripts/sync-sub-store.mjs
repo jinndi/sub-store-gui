@@ -27,6 +27,7 @@ if (await vendorIsCurrent()) {
   process.exit(0)
 }
 
+await mkdir(path.dirname(vendorRoot), { recursive: true })
 const temporaryDir = await mkdtemp(path.join(os.tmpdir(), 'sub-store-desktop-vendor-'))
 const stagingVendorRoot = await mkdtemp(path.join(path.dirname(vendorRoot), '.sub-store-vendor-'))
 try {
