@@ -205,6 +205,9 @@ function showUpdateProgressWindow(userDataDir: string): void {
   }
 
   const parentWindow = BrowserWindow.getFocusedWindow() ?? undefined
+  const preloadPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'source', 'scripts', 'update-preload.js')
+    : path.join(app.getAppPath(), 'scripts', 'update-preload.js')
   const options: Electron.BrowserWindowConstructorOptions = {
     width: 500,
     height: 300,
@@ -215,6 +218,7 @@ function showUpdateProgressWindow(userDataDir: string): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: preloadPath,
     },
   }
   
@@ -329,8 +333,6 @@ function showUpdateProgressWindow(userDataDir: string): void {
     <button id="actionBtn" style="display:none;">OK</button>
   </div>
   <script>
-    const { ipcRenderer } = require('electron');
-    
     const stages = {
       'checking': { progress: 10, message: 'Проверка обновлений...' },
       'downloading': { progress: 40, message: 'Загрузка компонентов...' },
@@ -355,7 +357,7 @@ function showUpdateProgressWindow(userDataDir: string): void {
         btn.className = 'restart';
         btn.style.display = 'inline-block';
         btn.onclick = () => {
-          ipcRenderer.invoke('app:restart');
+          window.updateAPI.restart();
         };
       } else if (stage === 'error') {
         document.getElementById('spinner').style.display = 'none';
@@ -366,12 +368,12 @@ function showUpdateProgressWindow(userDataDir: string): void {
         btn.textContent = 'Закрыть';
         btn.style.display = 'inline-block';
         btn.onclick = () => {
-          ipcRenderer.invoke('update:close');
+          window.updateAPI.close();
         };
       }
     }
 
-    ipcRenderer.on('update:progress', (event, data) => {
+    window.updateAPI.onProgress((data) => {
       updateStage(data.stage, data.message);
     });
   </script>
