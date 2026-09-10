@@ -14,6 +14,7 @@ import {
 } from './permissions.js'
 import { createAppOrigin, createAppUrl, ensureRuntimeConfig } from './runtime-config.js'
 import { SubStoreService } from './sub-store-service.js'
+import { checkForUpdates } from './update-checker.js'
 
 const SESSION_PARTITION = 'persist:substore-desktop'
 
@@ -63,6 +64,12 @@ async function createMainWindow(): Promise<void> {
   if (mainWindow) return
 
   const userDataDir = app.getPath('userData')
+  
+  // Проверяем обновления раз в день
+  await checkForUpdates(userDataDir).catch((error) => {
+    console.error('Ошибка при проверке обновлений:', error)
+  })
+  
   const runtimeConfig = startedRuntime ?? await ensureRuntimeConfig(userDataDir)
   const vendorRoot = startedVendorRoot ?? (app.isPackaged
     ? path.join(process.resourcesPath, 'vendor')

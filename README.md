@@ -11,7 +11,7 @@
 - Конфигурация сборки для Windows, macOS и Linux (x64 и ARM64)
 - Фиксированные версии upstream-компонентов с проверкой SHA-256
 
-Текущие зафиксированные версии: Sub-Store `2.37.1`, Sub-Store Front End `2.31.0`. Подробнее см. [`vendor-lock.json`](vendor-lock.json).
+Текущие зафиксированные версии: Sub-Store `2.38.2`, Sub-Store Front End `2.31.2`. Подробнее см. [`vendor-lock.json`](vendor-lock.json).
 
 ## Архитектура
 
