@@ -29,7 +29,7 @@ interface VendorLock {
 }
 
 interface UpdateState {
-  lastCheckDate: string
+  lastCheckAt: number
   availableUpdate: {
     backendVersion: string
     frontendVersion: string
@@ -37,6 +37,7 @@ interface UpdateState {
 }
 
 const UPDATE_STATE_FILE = 'update-state.json'
+const UPDATE_CHECK_INTERVAL_MS = 8 * 60 * 60 * 1000
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/sub-store-org/Sub-Store/releases/latest'
 const LATEST_FRONTEND_RELEASE_URL = 'https://api.github.com/repos/sub-store-org/Sub-Store-Front-End/releases/latest'
 
@@ -68,7 +69,7 @@ export async function checkForUpdates(userDataDir: string, vendorRoot?: string, 
     ? path.join(userDataDir, 'sub-store', 'vendor-lock.json')
     : path.join(app.getAppPath(), 'vendor-lock.json')
   
-  let currentState: UpdateState = { lastCheckDate: '', availableUpdate: null }
+  let currentState: UpdateState = { lastCheckAt: 0, availableUpdate: null }
   try {
     const stateText = await readFile(statePath, 'utf8')
     currentState = JSON.parse(stateText)
@@ -76,10 +77,20 @@ export async function checkForUpdates(userDataDir: string, vendorRoot?: string, 
     // Файл состояния не существует или повреждён — создадим новый
   }
   
-  // Проверяем, прошел ли день с последней проверки
-  const today = new Date().toLocaleDateString('ru-RU', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
-  if (currentState.lastCheckDate === today) {
-    return // Уже проверяли сегодня
+  const now = Date.now()
+  if (
+    typeof currentState.lastCheckAt === 'number' &&
+    Number.isFinite(currentState.lastCheckAt) &&
+    now - currentState.lastCheckAt < UPDATE_CHECK_INTERVAL_MS
+  ) {
+    return
+  }
+
+  currentState.lastCheckAt = now
+  try {
+    await writeFile(statePath, JSON.stringify(currentState, null, 2), { mode: 0o600 })
+  } catch {
+    // Ошибка записи состояния не должна блокировать проверку обновлений.
   }
   
   // Читаем текущие версии из vendor-lock.json
@@ -122,9 +133,6 @@ export async function checkForUpdates(userDataDir: string, vendorRoot?: string, 
     const currentBackendVersion = currentLock.backend.version
     const currentFrontendVersion = currentLock.frontend.version
     
-    // Сохраняем дату проверки
-    const todayChecked = today
-    currentState.lastCheckDate = todayChecked
     currentState.availableUpdate = null
     
     // Проверяем, есть ли обновления
@@ -150,9 +158,6 @@ export async function checkForUpdates(userDataDir: string, vendorRoot?: string, 
     await writeFile(statePath, JSON.stringify(currentState, null, 2), { mode: 0o600 })
   } catch (error) {
     console.error('Ошибка при проверке обновлений:', error)
-    // Всё равно сохраняем дату проверки, чтобы не спамить запросами
-    const todayChecked = today
-    currentState.lastCheckDate = todayChecked
     try {
       await writeFile(statePath, JSON.stringify(currentState, null, 2), { mode: 0o600 })
     } catch {
@@ -186,15 +191,29 @@ async function showUpdateDialog(
     ? `\nFrontend: ${currentLock.frontend.version} → ${availableUpdate.frontendVersion}`
     : ''
   
-  const { response } = await dialog.showMessageBox({
-    type: 'question',
-    buttons: ['Обновить', 'Отмена'],
-    defaultId: 0,
-    cancelId: 1,
-    title: 'Доступно обновление Sub-Store',
-    message: 'Найдены новые версии компонентов Sub-Store',
-    detail: `Текущие версии:${backendMsg}${frontendMsg}\n\nХотите загрузить и установить обновления?`,
-  })
+  const parentWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  parentWindow?.show()
+  parentWindow?.focus()
+  parentWindow?.setAlwaysOnTop(true, 'floating')
+
+  let response: number
+  try {
+    const options: Electron.MessageBoxOptions = {
+      type: 'question',
+      buttons: ['Обновить', 'Отмена'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Доступно обновление Sub-Store',
+      message: 'Найдены новые версии компонентов Sub-Store',
+      detail: `Текущие версии:${backendMsg}${frontendMsg}\n\nХотите загрузить и установить обновления?`,
+    }
+    const result = parentWindow
+      ? await dialog.showMessageBox(parentWindow, options)
+      : await dialog.showMessageBox(options)
+    response = result.response
+  } finally {
+    parentWindow?.setAlwaysOnTop(false)
+  }
   
   if (response === 0) {
     // Пользователь согласился на обновление - показываем окно прогресса
@@ -400,7 +419,7 @@ async function performUpdateWithProgress(userDataDir: string, vendorRoot?: strin
       : path.join(app.getAppPath(), 'vendor-lock.json')
 
     const statePath = path.join(userDataDir, UPDATE_STATE_FILE)
-    let currentState: UpdateState = { lastCheckDate: '', availableUpdate: null }
+    let currentState: UpdateState = { lastCheckAt: 0, availableUpdate: null }
     try {
       const stateText = await readFile(statePath, 'utf8')
       currentState = JSON.parse(stateText)

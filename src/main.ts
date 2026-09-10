@@ -18,6 +18,7 @@ import { checkForUpdates, setupUpdateHandlers } from './update-checker.js'
 import { ensureUserVendor } from './vendor-runtime.js'
 
 const SESSION_PARTITION = 'persist:substore-desktop'
+const UPDATE_CHECK_DELAY_MS = 3000
 
 let mainWindow: BrowserWindow | null = null
 let service: SubStoreService | undefined
@@ -74,11 +75,6 @@ async function createMainWindow(): Promise<void> {
       )).vendorRoot
     : path.join(app.getAppPath(), 'resources', 'vendor')
   
-  // Проверяем обновления раз в день
-  await checkForUpdates(userDataDir, app.isPackaged ? vendorRoot : undefined).catch((error) => {
-    console.error('Ошибка при проверке обновлений:', error)
-  })
-  
   const runtimeConfig = startedRuntime ?? await ensureRuntimeConfig(userDataDir)
   const resolvedVendorRoot = startedVendorRoot ?? vendorRoot
   const expectedOrigin = createAppOrigin(runtimeConfig)
@@ -132,6 +128,14 @@ async function createMainWindow(): Promise<void> {
     mainWindow = null
   })
   await window.loadURL(createAppUrl(runtimeConfig))
+
+  if (app.isPackaged) {
+    setTimeout(() => {
+      void checkForUpdates(userDataDir, vendorRoot).catch((error) => {
+        console.error('Ошибка при проверке обновлений:', error)
+      })
+    }, UPDATE_CHECK_DELAY_MS)
+  }
 }
 
 function configurePermissions(appSession: Electron.Session, expectedOrigin: string): void {
