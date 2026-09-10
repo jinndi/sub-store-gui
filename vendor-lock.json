@@ -2,20 +2,20 @@
   "schemaVersion": 1,
   "backend": {
     "name": "Sub-Store",
-    "version": "2.38.2",
-    "url": "https://github.com/sub-store-org/Sub-Store/releases/download/2.38.2/sub-store.bundle.js",
-    "sha256": "f1e1430313c0d5df6f937f5d7f3a90b92efec67bc96e1797502c50f94ec9527a",
+    "version": "2.39.1",
+    "url": "https://github.com/sub-store-org/Sub-Store/releases/download/2.39.1/sub-store.bundle.js",
+    "sha256": "bcff235d3190681242fa8ea5a8eb584c807359ad90dd4bd4dba49ab75e879078",
     "output": "sub-store.bundle.cjs",
-    "licenseUrl": "https://raw.githubusercontent.com/sub-store-org/Sub-Store/2.38.2/LICENSE",
+    "licenseUrl": "https://raw.githubusercontent.com/sub-store-org/Sub-Store/2.39.1/LICENSE",
     "licenseSha256": "08e3bf9a0da8b80a8ca22489937661f31d3f851cd37a27033645bb05bbe4da90"
   },
   "frontend": {
     "name": "Sub-Store-Front-End",
-    "version": "2.31.2",
-    "url": "https://github.com/sub-store-org/Sub-Store-Front-End/releases/download/2.31.2/dist.zip",
-    "sha256": "a30a34fa0af71e8e95a01f25a2b8efeb98942cc6ee3ba2761a000484ffe073c3",
-    "treeSha256": "5168e86aa3a62ec034c84b570b6d598354af3e7e86a0af59e7e87d2833703d6b",
-    "licenseUrl": "https://raw.githubusercontent.com/sub-store-org/Sub-Store-Front-End/2.31.2/LICENSE",
+    "version": "2.32.1",
+    "url": "https://github.com/sub-store-org/Sub-Store-Front-End/releases/download/2.32.1/dist.zip",
+    "sha256": "01bd25f1123372350a1bb32c80dfbcff11fa4a2faa2eeb660e6ca89fb975cdfb",
+    "treeSha256": "4df2c2440a72458543ed291e1f2352a8ed9e4e25f5230f606017d760fab478b3",
+    "licenseUrl": "https://raw.githubusercontent.com/sub-store-org/Sub-Store-Front-End/2.32.1/LICENSE",
     "licenseSha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
   }
 }

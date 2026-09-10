@@ -4,11 +4,14 @@ import path from 'node:path'
 import { unzipSync } from 'fflate'
 import {
   downloadVerified,
+  projectRoot,
   readVendorLock,
   sha256File,
   sha256Tree,
   vendorRoot,
 } from './vendor-utils.mjs'
+
+const lockPath = process.env.VENDOR_LOCK_PATH || path.join(projectRoot, 'vendor-lock.json')
 
 const lock = await readVendorLock()
 const backendDir = path.join(vendorRoot, 'backend')

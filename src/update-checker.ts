@@ -1,5 +1,8 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
+import { unzipSync } from 'fflate'
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 
 interface VendorLock {
@@ -221,11 +224,11 @@ function showUpdateProgressWindow(userDataDir: string): void {
       preload: preloadPath,
     },
   }
-  
+
   if (parentWindow) {
     options.parent = parentWindow
   }
-  
+
   updateWindow = new BrowserWindow(options)
 
   const htmlContent = `
@@ -346,7 +349,7 @@ function showUpdateProgressWindow(userDataDir: string): void {
       const stageData = stages[stage] || { progress: 0, message: stage };
       document.getElementById('progressFill').style.width = stageData.progress + '%';
       document.getElementById('status').textContent = customMessage || stageData.message;
-      
+
       if (stage === 'complete') {
         document.getElementById('spinner').style.display = 'none';
         document.getElementById('title').textContent = 'Готово!';
@@ -382,8 +385,7 @@ function showUpdateProgressWindow(userDataDir: string): void {
   `
 
   updateWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent))
-  
-  // Ждём загрузки окна перед запуском обновления
+
   updateWindow.webContents.once('did-finish-load', () => {
     performUpdateWithProgress(userDataDir)
   })
@@ -391,40 +393,117 @@ function showUpdateProgressWindow(userDataDir: string): void {
 
 async function performUpdateWithProgress(userDataDir: string): Promise<void> {
   try {
+    const vendorRoot = app.isPackaged
+      ? path.join(process.resourcesPath, 'vendor')
+      : path.join(app.getAppPath(), 'resources', 'vendor')
+    const vendorLockPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'source', 'vendor-lock.json')
+      : path.join(app.getAppPath(), 'vendor-lock.json')
+
+    const statePath = path.join(userDataDir, UPDATE_STATE_FILE)
+    let currentState: UpdateState = { lastCheckDate: '', availableUpdate: null }
+    try {
+      const stateText = await readFile(statePath, 'utf8')
+      currentState = JSON.parse(stateText)
+    } catch {
+      // ignore
+    }
+
+    if (!currentState.availableUpdate) {
+      throw new Error('Информация об обновлении не найдена')
+    }
+
+    const backendVersion = currentState.availableUpdate.backendVersion
+    const frontendVersion = currentState.availableUpdate.frontendVersion
+
+    const backendUrl = `https://github.com/sub-store-org/Sub-Store/releases/download/${backendVersion}/sub-store.bundle.js`
+    const frontendUrl = `https://github.com/sub-store-org/Sub-Store-Front-End/releases/download/${frontendVersion}/dist.zip`
+    const backendLicenseUrl = `https://raw.githubusercontent.com/sub-store-org/Sub-Store/${backendVersion}/LICENSE`
+    const frontendLicenseUrl = `https://raw.githubusercontent.com/sub-store-org/Sub-Store-Front-End/${frontendVersion}/LICENSE`
+
+    if (updateWindow) {
+      updateWindow.webContents.send('update:progress', { stage: 'downloading', message: 'Загрузка компонентов...' })
+    }
+
+    const [backendBytes, frontendBytes, backendLicense, frontendLicense] = await Promise.all([
+      downloadVerified(backendUrl),
+      downloadVerified(frontendUrl),
+      downloadVerified(backendLicenseUrl),
+      downloadVerified(frontendLicenseUrl),
+    ])
+
+    if (updateWindow) {
+      updateWindow.webContents.send('update:progress', { stage: 'extracting', message: 'Проверка файлов...' })
+    }
+
+    const backendSha256 = createHash('sha256').update(backendBytes).digest('hex')
+    const frontendSha256 = createHash('sha256').update(frontendBytes).digest('hex')
+    const backendLicenseSha256 = createHash('sha256').update(backendLicense).digest('hex')
+    const frontendLicenseSha256 = createHash('sha256').update(frontendLicense).digest('hex')
+
+    const extractedPath = path.join(os.tmpdir(), `sub-store-desktop-frontend-${Date.now()}`)
+    let frontendTreeSha256 = ''
+    try {
+      await extractZipSafely(frontendBytes, extractedPath)
+      const extractedDistPath = path.join(extractedPath, 'dist')
+      frontendTreeSha256 = await sha256Tree(extractedDistPath)
+    } finally {
+      await rm(extractedPath, { recursive: true, force: true })
+    }
+
+    const currentLock = JSON.parse(await readFile(vendorLockPath, 'utf8'))
+    const newLock = {
+      schemaVersion: currentLock.schemaVersion,
+      backend: {
+        name: currentLock.backend.name,
+        version: backendVersion,
+        url: backendUrl,
+        sha256: backendSha256,
+        output: currentLock.backend.output,
+        licenseUrl: backendLicenseUrl,
+        licenseSha256: backendLicenseSha256,
+      },
+      frontend: {
+        name: currentLock.frontend.name,
+        version: frontendVersion,
+        url: frontendUrl,
+        sha256: frontendSha256,
+        treeSha256: frontendTreeSha256,
+        licenseUrl: frontendLicenseUrl,
+        licenseSha256: frontendLicenseSha256,
+      },
+    }
+
+    const tempLockPath = path.join(userDataDir, 'vendor-lock.json.tmp')
+    await writeFile(tempLockPath, JSON.stringify(newLock, null, 2), { mode: 0o600 })
+
+    if (updateWindow) {
+      updateWindow.webContents.send('update:progress', { stage: 'installing', message: 'Установка обновлений...' })
+    }
+
     const { spawn } = await import('node:child_process')
-    
-    // Определяем путь к скрипту в зависимости от режима
     const scriptPath = app.isPackaged
       ? path.join(process.resourcesPath, 'source', 'scripts', 'sync-sub-store.mjs')
       : path.join(app.getAppPath(), 'scripts', 'sync-sub-store.mjs')
     const nodePath = process.execPath
-    
-    if (updateWindow) {
-      updateWindow.webContents.send('update:progress', { stage: 'checking', message: 'Проверка текущих версий...' })
-    }
-    
+
     const updateResult = await new Promise<{ success: boolean; error?: string }>((resolve) => {
       const child = spawn(nodePath, [scriptPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env }
+        env: { ...process.env, VENDOR_LOCK_PATH: tempLockPath }
       })
-      
+
       let stdout = ''
       let stderr = ''
-      
-      // Отправляем прогресс по мере получения данных
-      if (updateWindow) {
-        updateWindow.webContents.send('update:progress', { stage: 'downloading', message: 'Загрузка компонентов...' })
-      }
-      
+
       child.stdout?.on('data', (data) => {
         stdout += data.toString()
       })
-      
+
       child.stderr?.on('data', (data) => {
         stderr += data.toString()
       })
-      
+
       child.on('close', (code) => {
         if (code === 0) {
           resolve({ success: true })
@@ -432,37 +511,106 @@ async function performUpdateWithProgress(userDataDir: string): Promise<void> {
           resolve({ success: false, error: stderr || `Код выхода: ${code}` })
         }
       })
-      
+
       child.on('error', (err) => {
         resolve({ success: false, error: err.message })
       })
     })
-    
-    if (updateWindow) {
-      if (updateResult.success) {
-        updateWindow.webContents.send('update:progress', { 
-          stage: 'complete', 
-          message: 'Обновление завершено!' 
+
+    if (updateResult.success) {
+      await writeFile(vendorLockPath, await readFile(tempLockPath), { mode: 0o600 })
+      await rm(tempLockPath, { force: true })
+
+      if (updateWindow) {
+        updateWindow.webContents.send('update:progress', {
+          stage: 'complete',
+          message: 'Обновление завершено!'
         })
-      } else {
-        updateWindow.webContents.send('update:progress', { 
-          stage: 'error', 
-          message: updateResult.error 
+      }
+    } else {
+      await rm(tempLockPath, { force: true })
+      if (updateWindow) {
+        updateWindow.webContents.send('update:progress', {
+          stage: 'error',
+          message: updateResult.error
         })
       }
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     if (updateWindow) {
-      updateWindow.webContents.send('update:progress', { 
-        stage: 'error', 
-        message: errorMessage 
+      updateWindow.webContents.send('update:progress', {
+        stage: 'error',
+        message: errorMessage
       })
     }
   }
 }
 
 async function performUpdate(userDataDir: string): Promise<void> {
-  // Эта функция теперь вызывает окно прогресса
   showUpdateProgressWindow(userDataDir)
+}
+
+async function downloadVerified(url: string): Promise<Buffer> {
+  const response = await fetch(url, {
+    redirect: 'follow',
+    headers: { 'User-Agent': 'sub-store-desktop-update-checker' },
+    signal: AbortSignal.timeout(30000),
+  })
+  if (!response.ok) {
+    throw new Error(`Не удалось скачать ${url}: ${response.status}`)
+  }
+  return Buffer.from(await response.arrayBuffer())
+}
+
+async function extractZipSafely(archiveBytes: Buffer, destinationRoot: string): Promise<void> {
+  const files = unzipSync(archiveBytes)
+  const resolvedRoot = path.resolve(destinationRoot)
+
+  for (const [archivePath, content] of Object.entries(files)) {
+    const normalizedPath = path.posix.normalize(archivePath.replaceAll('\\', '/'))
+    if (
+      normalizedPath.startsWith('/') ||
+      normalizedPath === '..' ||
+      normalizedPath.startsWith('../') ||
+      normalizedPath.includes('\0')
+    ) {
+      throw new Error(`ZIP содержит небезопасный путь: ${archivePath}`)
+    }
+
+    const outputPath = path.resolve(resolvedRoot, normalizedPath)
+    if (outputPath !== resolvedRoot && !outputPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+      throw new Error(`ZIP за пределами допустимой области: ${archivePath}`)
+    }
+    if (archivePath.endsWith('/')) {
+      await mkdir(outputPath, { recursive: true })
+      continue
+    }
+    await mkdir(path.dirname(outputPath), { recursive: true })
+    await writeFile(outputPath, content)
+  }
+}
+
+async function sha256Tree(rootDir: string): Promise<string> {
+  const files = await walk(rootDir)
+  const hash = createHash('sha256')
+  for (const filePath of files.sort()) {
+    const relativePath = path.relative(rootDir, filePath).split(path.sep).join('/')
+    hash.update(relativePath)
+    hash.update('\0')
+    hash.update(await readFile(filePath))
+    hash.update('\0')
+  }
+  return hash.digest('hex')
+}
+
+async function walk(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const output: string[] = []
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name)
+    if (entry.isDirectory()) output.push(...(await walk(entryPath)))
+    else if (entry.isFile()) output.push(entryPath)
+  }
+  return output
 }
