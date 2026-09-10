@@ -60,10 +60,10 @@ export function setupUpdateHandlers(): void {
 export async function checkForUpdates(userDataDir: string, silent: boolean = false): Promise<void> {
   const statePath = path.join(userDataDir, UPDATE_STATE_FILE)
   
-  // В production vendor-lock.json находится в resources/app/
+  // В production vendor-lock.json находится в resources/source/
   const appPath = app.getAppPath()
   const vendorLockPath = app.isPackaged
-    ? path.join(path.dirname(appPath), 'resources', 'app', 'vendor-lock.json')
+    ? path.join(path.dirname(appPath), 'resources', 'source', 'vendor-lock.json')
     : path.join(appPath, 'vendor-lock.json')
   
   let currentState: UpdateState = { lastCheckDate: '', availableUpdate: null }
@@ -75,7 +75,7 @@ export async function checkForUpdates(userDataDir: string, silent: boolean = fal
   }
   
   // Проверяем, прошел ли день с последней проверки
-  const today = new Date().toISOString().split('T')[0] ?? ''
+  const today = new Date().toLocaleDateString('ru-RU', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
   if (currentState.lastCheckDate === today) {
     return // Уже проверяли сегодня
   }
@@ -393,7 +393,7 @@ async function performUpdateWithProgress(userDataDir: string): Promise<void> {
     // Определяем путь к скрипту в зависимости от режима
     const appPath = app.getAppPath()
     const scriptPath = app.isPackaged
-      ? path.join(path.dirname(appPath), 'resources', 'app', 'scripts', 'sync-sub-store.mjs')
+      ? path.join(path.dirname(appPath), 'resources', 'source', 'scripts', 'sync-sub-store.mjs')
       : path.join(appPath, 'scripts', 'sync-sub-store.mjs')
     const nodePath = process.execPath
     
