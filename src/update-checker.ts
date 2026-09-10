@@ -132,6 +132,9 @@ export async function checkForUpdates(userDataDir: string, vendorRoot?: string, 
     
     const currentBackendVersion = currentLock.backend.version
     const currentFrontendVersion = currentLock.frontend.version
+      const vendorNeedsRepair = vendorRoot
+        ? !(await isVendorInSync(vendorRoot, currentLock))
+        : false
     
     currentState.availableUpdate = null
     
@@ -139,7 +142,7 @@ export async function checkForUpdates(userDataDir: string, vendorRoot?: string, 
     const backendUpdated = compareVersions(latestBackendVersion, currentBackendVersion) > 0
     const frontendUpdated = compareVersions(latestFrontendVersion, currentFrontendVersion) > 0
     
-    if (backendUpdated || frontendUpdated) {
+    if (backendUpdated || frontendUpdated || vendorNeedsRepair) {
       currentState.availableUpdate = {
         backendVersion: latestBackendVersion,
         frontendVersion: latestFrontendVersion
@@ -151,7 +154,7 @@ export async function checkForUpdates(userDataDir: string, vendorRoot?: string, 
         await writeFile(statePath, JSON.stringify(currentState, null, 2), { mode: 0o600 })
         return
       }
-      await showUpdateDialog(currentState.availableUpdate, currentLock, userDataDir, vendorRoot)
+      await showUpdateDialog(currentState.availableUpdate, currentLock, userDataDir, vendorRoot, vendorNeedsRepair)
     }
     
     // Сохраняем состояние
@@ -183,6 +186,7 @@ async function showUpdateDialog(
   currentLock: VendorLock,
   userDataDir: string,
   vendorRoot?: string,
+  vendorNeedsRepair: boolean = false,
 ): Promise<void> {
   const backendMsg = availableUpdate.backendVersion !== currentLock.backend.version
     ? `\nBackend: ${currentLock.backend.version} → ${availableUpdate.backendVersion}`
@@ -204,7 +208,9 @@ async function showUpdateDialog(
       defaultId: 0,
       cancelId: 1,
       title: 'Доступно обновление Sub-Store',
-      message: 'Найдены новые версии компонентов Sub-Store',
+      message: vendorNeedsRepair
+        ? 'Файлы компонентов Sub-Store требуют восстановления'
+        : 'Найдены новые версии компонентов Sub-Store',
       detail: `Текущие версии:${backendMsg}${frontendMsg}\n\nХотите загрузить и установить обновления?`,
     }
     const result = parentWindow
@@ -510,6 +516,7 @@ async function performUpdateWithProgress(userDataDir: string, vendorRoot?: strin
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
           VENDOR_LOCK_PATH: tempLockPath,
           VENDOR_ROOT_PATH: resolvedVendorRoot,
         }
@@ -540,6 +547,7 @@ async function performUpdateWithProgress(userDataDir: string, vendorRoot?: strin
     })
 
     if (updateResult.success) {
+      await verifyInstalledVendor(resolvedVendorRoot, newLock)
       await writeFile(vendorLockPath, await readFile(tempLockPath), { mode: 0o600 })
       await rm(tempLockPath, { force: true })
 
@@ -635,4 +643,40 @@ async function walk(directory: string): Promise<string[]> {
     else if (entry.isFile()) output.push(entryPath)
   }
   return output
+}
+
+async function verifyInstalledVendor(vendorRoot: string, lock: VendorLock): Promise<void> {
+  const manifest = JSON.parse(await readFile(path.join(vendorRoot, 'manifest.json'), 'utf8')) as VendorLock
+  const backendPath = path.join(vendorRoot, 'backend', lock.backend.output)
+  const frontendPath = path.join(vendorRoot, 'frontend')
+  const backendSha256 = createHash('sha256').update(await readFile(backendPath)).digest('hex')
+  const frontendTreeSha256 = await sha256Tree(frontendPath)
+
+  if (
+    manifest.backend?.version !== lock.backend.version ||
+    manifest.frontend?.version !== lock.frontend.version ||
+    backendSha256 !== lock.backend.sha256 ||
+    frontendTreeSha256 !== lock.frontend.treeSha256
+  ) {
+    throw new Error('Синхронизация завершилась без установки новых файлов vendor')
+  }
+}
+
+async function isVendorInSync(vendorRoot: string, lock: VendorLock): Promise<boolean> {
+  try {
+    const manifest = JSON.parse(await readFile(path.join(vendorRoot, 'manifest.json'), 'utf8')) as VendorLock
+    const backendSha256 = createHash('sha256')
+      .update(await readFile(path.join(vendorRoot, 'backend', lock.backend.output)))
+      .digest('hex')
+    const frontendTreeSha256 = await sha256Tree(path.join(vendorRoot, 'frontend'))
+
+    return (
+      manifest.backend?.version === lock.backend.version &&
+      manifest.frontend?.version === lock.frontend.version &&
+      backendSha256 === lock.backend.sha256 &&
+      frontendTreeSha256 === lock.frontend.treeSha256
+    )
+  } catch {
+    return false
+  }
 }
