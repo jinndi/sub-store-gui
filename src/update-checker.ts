@@ -512,7 +512,7 @@ async function performUpdateWithProgress(userDataDir: string, vendorRoot?: strin
     const nodePath = process.execPath
 
     const updateResult = await new Promise<{ success: boolean; error?: string }>((resolve) => {
-      const child = spawn(nodePath, ['--run-as-node', scriptPath], {
+      const child = spawn(nodePath, [scriptPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
