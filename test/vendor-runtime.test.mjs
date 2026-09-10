@@ -50,7 +50,13 @@ test('ensureUserVendor initializes writable runtime files without overwriting up
 
     await rm(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs'))
     await ensureUserVendor(userDataDir, bundledVendorRoot, bundledLockPath)
-    assert.equal(await readFile(runtimePaths.lockPath, 'utf8'), '{"backend":{"version":"bundled"},"frontend":{"version":"bundled"}}')
+    assert.equal(
+      await readFile(runtimePaths.lockPath, 'utf8'),
+      '{"backend":{"version":"updated"},"frontend":{"version":"updated"}}',
+    )
+    await assert.rejects(
+      readFile(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs'), 'utf8'),
+    )
   } finally {
     await rm(root, { recursive: true, force: true })
   }

@@ -22,13 +22,13 @@ export async function ensureUserVendor(
   const runtimePaths = getUserVendorRuntimePaths(userDataDir)
   await mkdir(path.dirname(runtimePaths.lockPath), { recursive: true, mode: 0o700 })
 
-  if (!(await isFile(runtimePaths.lockPath))) {
+  const isFirstRun = !(await isFile(runtimePaths.lockPath))
+  if (isFirstRun) {
     await writeFile(runtimePaths.lockPath, await readFile(bundledLockPath), { mode: 0o600 })
   }
 
-  if (!(await isVendorReady(runtimePaths))) {
+  if (isFirstRun && !(await hasVendorFiles(runtimePaths))) {
     await cp(bundledVendorRoot, runtimePaths.vendorRoot, { recursive: true, force: true })
-    await writeFile(runtimePaths.lockPath, await readFile(bundledLockPath), { mode: 0o600 })
   }
 
   return runtimePaths
@@ -42,30 +42,11 @@ async function isFile(filePath: string): Promise<boolean> {
   }
 }
 
-async function isVendorReady(runtimePaths: VendorRuntimePaths): Promise<boolean> {
-  try {
-    const [lockText, manifestText] = await Promise.all([
-      readFile(runtimePaths.lockPath, 'utf8'),
-      readFile(path.join(runtimePaths.vendorRoot, 'manifest.json'), 'utf8'),
-    ])
-    const lock = JSON.parse(lockText) as {
-      backend?: { version?: string }
-      frontend?: { version?: string }
-    }
-    const manifest = JSON.parse(manifestText) as {
-      backend?: { version?: string }
-      frontend?: { version?: string }
-    }
-    const files = await Promise.all([
-      isFile(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs')),
-      isFile(path.join(runtimePaths.vendorRoot, 'frontend', 'index.html')),
-    ])
-    return (
-      files.every(Boolean) &&
-      manifest.backend?.version === lock.backend?.version &&
-      manifest.frontend?.version === lock.frontend?.version
-    )
-  } catch {
-    return false
-  }
+async function hasVendorFiles(runtimePaths: VendorRuntimePaths): Promise<boolean> {
+  const files = await Promise.all([
+    isFile(path.join(runtimePaths.vendorRoot, 'backend', 'sub-store.bundle.cjs')),
+    isFile(path.join(runtimePaths.vendorRoot, 'frontend', 'index.html')),
+    isFile(path.join(runtimePaths.vendorRoot, 'manifest.json')),
+  ])
+  return files.every(Boolean)
 }
