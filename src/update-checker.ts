@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { unzipSync } from 'fflate'
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { getUserVendorRuntimePaths } from './vendor-runtime.js'
 
 interface VendorLock {
   schemaVersion: number
@@ -60,12 +61,11 @@ export function setupUpdateHandlers(): void {
   })
 }
 
-export async function checkForUpdates(userDataDir: string, silent: boolean = false): Promise<void> {
+export async function checkForUpdates(userDataDir: string, vendorRoot?: string, silent: boolean = false): Promise<void> {
   const statePath = path.join(userDataDir, UPDATE_STATE_FILE)
   
-  // В production vendor-lock.json находится в resources/source/
-  const vendorLockPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'source', 'vendor-lock.json')
+  const vendorLockPath = vendorRoot
+    ? path.join(userDataDir, 'sub-store', 'vendor-lock.json')
     : path.join(app.getAppPath(), 'vendor-lock.json')
   
   let currentState: UpdateState = { lastCheckDate: '', availableUpdate: null }
@@ -143,7 +143,7 @@ export async function checkForUpdates(userDataDir: string, silent: boolean = fal
         await writeFile(statePath, JSON.stringify(currentState, null, 2), { mode: 0o600 })
         return
       }
-      await showUpdateDialog(currentState.availableUpdate, currentLock, userDataDir)
+      await showUpdateDialog(currentState.availableUpdate, currentLock, userDataDir, vendorRoot)
     }
     
     // Сохраняем состояние
@@ -176,7 +176,8 @@ function compareVersions(v1: string, v2: string): number {
 async function showUpdateDialog(
   availableUpdate: { backendVersion: string; frontendVersion: string },
   currentLock: VendorLock,
-  userDataDir: string
+  userDataDir: string,
+  vendorRoot?: string,
 ): Promise<void> {
   const backendMsg = availableUpdate.backendVersion !== currentLock.backend.version
     ? `\nBackend: ${currentLock.backend.version} → ${availableUpdate.backendVersion}`
@@ -197,11 +198,11 @@ async function showUpdateDialog(
   
   if (response === 0) {
     // Пользователь согласился на обновление - показываем окно прогресса
-    showUpdateProgressWindow(userDataDir)
+    showUpdateProgressWindow(userDataDir, vendorRoot)
   }
 }
 
-function showUpdateProgressWindow(userDataDir: string): void {
+function showUpdateProgressWindow(userDataDir: string, vendorRoot?: string): void {
   if (updateWindow) {
     updateWindow.focus()
     return
@@ -387,17 +388,15 @@ function showUpdateProgressWindow(userDataDir: string): void {
   updateWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent))
 
   updateWindow.webContents.once('did-finish-load', () => {
-    performUpdateWithProgress(userDataDir)
+    performUpdateWithProgress(userDataDir, vendorRoot)
   })
 }
 
-async function performUpdateWithProgress(userDataDir: string): Promise<void> {
+async function performUpdateWithProgress(userDataDir: string, vendorRoot?: string): Promise<void> {
   try {
-    const vendorRoot = app.isPackaged
-      ? path.join(process.resourcesPath, 'vendor')
-      : path.join(app.getAppPath(), 'resources', 'vendor')
-    const vendorLockPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'source', 'vendor-lock.json')
+    const resolvedVendorRoot = vendorRoot ?? path.join(app.getAppPath(), 'resources', 'vendor')
+    const vendorLockPath = vendorRoot
+      ? getUserVendorRuntimePaths(userDataDir).lockPath
       : path.join(app.getAppPath(), 'vendor-lock.json')
 
     const statePath = path.join(userDataDir, UPDATE_STATE_FILE)
@@ -490,7 +489,11 @@ async function performUpdateWithProgress(userDataDir: string): Promise<void> {
     const updateResult = await new Promise<{ success: boolean; error?: string }>((resolve) => {
       const child = spawn(nodePath, [scriptPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, VENDOR_LOCK_PATH: tempLockPath }
+        env: {
+          ...process.env,
+          VENDOR_LOCK_PATH: tempLockPath,
+          VENDOR_ROOT_PATH: resolvedVendorRoot,
+        }
       })
 
       let stdout = ''

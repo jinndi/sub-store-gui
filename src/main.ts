@@ -15,6 +15,7 @@ import {
 import { createAppOrigin, createAppUrl, ensureRuntimeConfig } from './runtime-config.js'
 import { SubStoreService } from './sub-store-service.js'
 import { checkForUpdates, setupUpdateHandlers } from './update-checker.js'
+import { ensureUserVendor } from './vendor-runtime.js'
 
 const SESSION_PARTITION = 'persist:substore-desktop'
 
@@ -65,16 +66,21 @@ async function createMainWindow(): Promise<void> {
   if (mainWindow) return
 
   const userDataDir = app.getPath('userData')
+  const vendorRoot = app.isPackaged
+    ? (await ensureUserVendor(
+        userDataDir,
+        path.join(process.resourcesPath, 'vendor'),
+        path.join(process.resourcesPath, 'source', 'vendor-lock.json'),
+      )).vendorRoot
+    : path.join(app.getAppPath(), 'resources', 'vendor')
   
   // Проверяем обновления раз в день
-  await checkForUpdates(userDataDir).catch((error) => {
+  await checkForUpdates(userDataDir, app.isPackaged ? vendorRoot : undefined).catch((error) => {
     console.error('Ошибка при проверке обновлений:', error)
   })
   
   const runtimeConfig = startedRuntime ?? await ensureRuntimeConfig(userDataDir)
-  const vendorRoot = startedVendorRoot ?? (app.isPackaged
-    ? path.join(process.resourcesPath, 'vendor')
-    : path.join(app.getAppPath(), 'resources', 'vendor'))
+  const resolvedVendorRoot = startedVendorRoot ?? vendorRoot
   const expectedOrigin = createAppOrigin(runtimeConfig)
   const appSession = session.fromPartition(SESSION_PARTITION)
 
@@ -86,7 +92,7 @@ async function createMainWindow(): Promise<void> {
       config: runtimeConfig,
       dataDir: path.join(userDataDir, 'sub-store', 'data'),
       logDir: path.join(userDataDir, 'logs'),
-      vendorRoot,
+      vendorRoot: resolvedVendorRoot,
       onUnexpectedExit: (message) => {
         if (isQuitting) return
         dialog.showErrorBox('Sub-Store Desktop', `${message}\n\nПожалуйста, проверьте журналы в каталоге данных приложения.`)
@@ -94,10 +100,10 @@ async function createMainWindow(): Promise<void> {
       },
     })
     startedRuntime = runtimeConfig
-    startedVendorRoot = vendorRoot
+    startedVendorRoot = resolvedVendorRoot
   }
 
-  const iconPath = path.join(vendorRoot, 'frontend', '512x512.png')
+  const iconPath = path.join(resolvedVendorRoot, 'frontend', '512x512.png')
   const window = new BrowserWindow({
     title: 'Sub-Store Desktop',
     width: 1280,

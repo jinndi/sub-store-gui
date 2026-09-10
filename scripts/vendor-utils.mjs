@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-export const vendorRoot = path.join(projectRoot, 'resources', 'vendor')
+export const vendorRoot = process.env.VENDOR_ROOT_PATH || path.join(projectRoot, 'resources', 'vendor')
 
 export async function readVendorLock(lockPath) {
   if (!lockPath) {
