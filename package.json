@@ -69,6 +69,10 @@
         ]
       },
       {
+        "from": "node_modules/fflate",
+        "to": "source/node_modules/fflate"
+      },
+      {
         "from": "scripts",
         "to": "app/scripts",
         "filter": [
