@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { app, dialog } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 
 interface VendorLock {
   schemaVersion: number
@@ -36,9 +36,35 @@ const UPDATE_STATE_FILE = 'update-state.json'
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/sub-store-org/Sub-Store/releases/latest'
 const LATEST_FRONTEND_RELEASE_URL = 'https://api.github.com/repos/sub-store-org/Sub-Store-Front-End/releases/latest'
 
-export async function checkForUpdates(userDataDir: string): Promise<void> {
+let updateWindow: BrowserWindow | null = null
+
+export function setupUpdateHandlers(): void {
+  ipcMain.handle('update:start', async () => {
+    const userDataDir = app.getPath('userData')
+    await performUpdate(userDataDir)
+  })
+
+  ipcMain.handle('update:close', () => {
+    if (updateWindow) {
+      updateWindow.close()
+      updateWindow = null
+    }
+  })
+
+  ipcMain.handle('app:restart', () => {
+    app.relaunch()
+    app.quit()
+  })
+}
+
+export async function checkForUpdates(userDataDir: string, silent: boolean = false): Promise<void> {
   const statePath = path.join(userDataDir, UPDATE_STATE_FILE)
-  const vendorLockPath = path.join(app.getAppPath(), 'vendor-lock.json')
+  
+  // В production vendor-lock.json находится в resources/app/
+  const appPath = app.getAppPath()
+  const vendorLockPath = app.isPackaged
+    ? path.join(path.dirname(appPath), 'resources', 'app', 'vendor-lock.json')
+    : path.join(appPath, 'vendor-lock.json')
   
   let currentState: UpdateState = { lastCheckDate: '', availableUpdate: null }
   try {
@@ -110,6 +136,11 @@ export async function checkForUpdates(userDataDir: string): Promise<void> {
       }
       
       // Показываем диалог пользователю
+      if (silent) {
+        // В тихом режиме просто сохраняем состояние, пользователь проверит сам
+        await writeFile(statePath, JSON.stringify(currentState, null, 2), { mode: 0o600 })
+        return
+      }
       await showUpdateDialog(currentState.availableUpdate, currentLock, userDataDir)
     }
     
@@ -163,18 +194,212 @@ async function showUpdateDialog(
   })
   
   if (response === 0) {
-    // Пользователь согласился на обновление
-    await performUpdate(userDataDir)
+    // Пользователь согласился на обновление - показываем окно прогресса
+    showUpdateProgressWindow(userDataDir)
   }
 }
 
-async function performUpdate(userDataDir: string): Promise<void> {
+function showUpdateProgressWindow(userDataDir: string): void {
+  if (updateWindow) {
+    updateWindow.focus()
+    return
+  }
+
+  const parentWindow = BrowserWindow.getFocusedWindow() ?? undefined
+  const options: Electron.BrowserWindowConstructorOptions = {
+    width: 500,
+    height: 300,
+    resizable: false,
+    closable: false,
+    modal: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  }
+  
+  if (parentWindow) {
+    options.parent = parentWindow
+  }
+  
+  updateWindow = new BrowserWindow(options)
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+    .container {
+      text-align: center;
+      width: 100%;
+    }
+    h2 {
+      margin: 0 0 20px 0;
+      color: #333;
+      font-size: 18px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 20px;
+      background: #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 15px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4CAF50, #45a049);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .status {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #4CAF50;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .error {
+      color: #d32f2f;
+      background: #ffebee;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+    .success {
+      color: #388e3c;
+      background: #e8f5e9;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 30px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    button.restart {
+      background: #2196F3;
+    }
+    button.restart:hover {
+      background: #1976D2;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner" id="spinner"></div>
+    <h2 id="title">Обновление Sub-Store</h2>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="status" id="status">Подготовка...</div>
+    <div id="message"></div>
+    <button id="actionBtn" style="display:none;">OK</button>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    const stages = {
+      'checking': { progress: 10, message: 'Проверка обновлений...' },
+      'downloading': { progress: 40, message: 'Загрузка компонентов...' },
+      'extracting': { progress: 70, message: 'Распаковка файлов...' },
+      'installing': { progress: 90, message: 'Установка обновлений...' },
+      'complete': { progress: 100, message: 'Обновление завершено!' },
+      'error': { progress: 0, message: 'Ошибка обновления' }
+    };
+
+    function updateStage(stage, customMessage) {
+      const stageData = stages[stage] || { progress: 0, message: stage };
+      document.getElementById('progressFill').style.width = stageData.progress + '%';
+      document.getElementById('status').textContent = customMessage || stageData.message;
+      
+      if (stage === 'complete') {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('title').textContent = 'Готово!';
+        const msgDiv = document.getElementById('message');
+        msgDiv.innerHTML = '<div class="success">Sub-Store успешно обновлён до последних версий.</div>';
+        const btn = document.getElementById('actionBtn');
+        btn.textContent = 'Перезапустить приложение';
+        btn.className = 'restart';
+        btn.style.display = 'inline-block';
+        btn.onclick = () => {
+          ipcRenderer.invoke('app:restart');
+        };
+      } else if (stage === 'error') {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('title').textContent = 'Ошибка';
+        const msgDiv = document.getElementById('message');
+        msgDiv.innerHTML = '<div class="error">' + (customMessage || 'Не удалось выполнить обновление') + '</div>';
+        const btn = document.getElementById('actionBtn');
+        btn.textContent = 'Закрыть';
+        btn.style.display = 'inline-block';
+        btn.onclick = () => {
+          ipcRenderer.invoke('update:close');
+        };
+      }
+    }
+
+    ipcRenderer.on('update:progress', (event, data) => {
+      updateStage(data.stage, data.message);
+    });
+  </script>
+</body>
+</html>
+  `
+
+  updateWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent))
+  
+  // Запускаем процесс обновления
+  performUpdateWithProgress(userDataDir)
+}
+
+async function performUpdateWithProgress(userDataDir: string): Promise<void> {
   try {
-    // Запускаем скрипт синхронизации через spawn
     const { spawn } = await import('node:child_process')
     
-    const scriptPath = path.join(app.getAppPath(), 'scripts', 'sync-sub-store.mjs')
+    // Определяем путь к скрипту в зависимости от режима
+    const appPath = app.getAppPath()
+    const scriptPath = app.isPackaged
+      ? path.join(path.dirname(appPath), 'resources', 'app', 'scripts', 'sync-sub-store.mjs')
+      : path.join(appPath, 'scripts', 'sync-sub-store.mjs')
     const nodePath = process.execPath
+    
+    if (updateWindow) {
+      updateWindow.webContents.send('update:progress', { stage: 'checking', message: 'Проверка текущих версий...' })
+    }
     
     const updateResult = await new Promise<{ success: boolean; error?: string }>((resolve) => {
       const child = spawn(nodePath, [scriptPath], {
@@ -184,6 +409,11 @@ async function performUpdate(userDataDir: string): Promise<void> {
       
       let stdout = ''
       let stderr = ''
+      
+      // Отправляем прогресс по мере получения данных
+      if (updateWindow) {
+        updateWindow.webContents.send('update:progress', { stage: 'downloading', message: 'Загрузка компонентов...' })
+      }
       
       child.stdout?.on('data', (data) => {
         stdout += data.toString()
@@ -206,28 +436,31 @@ async function performUpdate(userDataDir: string): Promise<void> {
       })
     })
     
-    if (updateResult.success) {
-      await dialog.showMessageBox({
-        type: 'info',
-        buttons: ['OK'],
-        title: 'Обновление завершено',
-        message: 'Sub-Store успешно обновлён до последних версий.\n\nПерезапустите приложение для применения изменений.',
-      })
-    } else {
-      await dialog.showMessageBox({
-        type: 'error',
-        buttons: ['OK'],
-        title: 'Ошибка обновления',
-        message: `Не удалось выполнить обновление:\n${updateResult.error}`,
-      })
+    if (updateWindow) {
+      if (updateResult.success) {
+        updateWindow.webContents.send('update:progress', { 
+          stage: 'complete', 
+          message: 'Обновление завершено!' 
+        })
+      } else {
+        updateWindow.webContents.send('update:progress', { 
+          stage: 'error', 
+          message: updateResult.error 
+        })
+      }
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    await dialog.showMessageBox({
-      type: 'error',
-      buttons: ['OK'],
-      title: 'Ошибка обновления',
-      message: `Критическая ошибка при обновлении:\n${errorMessage}`,
-    })
+    if (updateWindow) {
+      updateWindow.webContents.send('update:progress', { 
+        stage: 'error', 
+        message: errorMessage 
+      })
+    }
   }
+}
+
+async function performUpdate(userDataDir: string): Promise<void> {
+  // Эта функция теперь вызывает окно прогресса
+  showUpdateProgressWindow(userDataDir)
 }

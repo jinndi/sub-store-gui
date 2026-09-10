@@ -14,7 +14,7 @@ import {
 } from './permissions.js'
 import { createAppOrigin, createAppUrl, ensureRuntimeConfig } from './runtime-config.js'
 import { SubStoreService } from './sub-store-service.js'
-import { checkForUpdates } from './update-checker.js'
+import { checkForUpdates, setupUpdateHandlers } from './update-checker.js'
 
 const SESSION_PARTITION = 'persist:substore-desktop'
 
@@ -56,6 +56,7 @@ if (!hasSingleInstanceLock) {
 }
 
 async function bootstrap(): Promise<void> {
+  setupUpdateHandlers()
   configureMenu()
   await createMainWindow()
 }

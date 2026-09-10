@@ -1,12 +1,13 @@
+```
 node_modules/
-app/dist/
-/dist/
-release/
+dist/
+build/
 *.log
-*.tsbuildinfo
-.DS_Store
-.idea/
+.env
+.env.local
+.env.*
 .vscode/
-
-# Downloaded, checksum-verified upstream release artifacts.
-resources/vendor/*
+.idea/
+*.tmp
+*.swp
+```
