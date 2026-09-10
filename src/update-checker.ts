@@ -61,10 +61,9 @@ export async function checkForUpdates(userDataDir: string, silent: boolean = fal
   const statePath = path.join(userDataDir, UPDATE_STATE_FILE)
   
   // В production vendor-lock.json находится в resources/source/
-  const appPath = app.getAppPath()
   const vendorLockPath = app.isPackaged
-    ? path.join(path.dirname(appPath), 'resources', 'source', 'vendor-lock.json')
-    : path.join(appPath, 'vendor-lock.json')
+    ? path.join(process.resourcesPath, 'source', 'vendor-lock.json')
+    : path.join(app.getAppPath(), 'vendor-lock.json')
   
   let currentState: UpdateState = { lastCheckDate: '', availableUpdate: null }
   try {
@@ -382,8 +381,10 @@ function showUpdateProgressWindow(userDataDir: string): void {
 
   updateWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent))
   
-  // Запускаем процесс обновления
-  performUpdateWithProgress(userDataDir)
+  // Ждём загрузки окна перед запуском обновления
+  updateWindow.webContents.once('did-finish-load', () => {
+    performUpdateWithProgress(userDataDir)
+  })
 }
 
 async function performUpdateWithProgress(userDataDir: string): Promise<void> {
@@ -391,10 +392,9 @@ async function performUpdateWithProgress(userDataDir: string): Promise<void> {
     const { spawn } = await import('node:child_process')
     
     // Определяем путь к скрипту в зависимости от режима
-    const appPath = app.getAppPath()
     const scriptPath = app.isPackaged
-      ? path.join(path.dirname(appPath), 'resources', 'source', 'scripts', 'sync-sub-store.mjs')
-      : path.join(appPath, 'scripts', 'sync-sub-store.mjs')
+      ? path.join(process.resourcesPath, 'source', 'scripts', 'sync-sub-store.mjs')
+      : path.join(app.getAppPath(), 'scripts', 'sync-sub-store.mjs')
     const nodePath = process.execPath
     
     if (updateWindow) {
